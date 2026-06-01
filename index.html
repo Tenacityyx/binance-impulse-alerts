@@ -1549,12 +1549,6 @@
         return;
       }
 
-      if (Notification.permission === "granted" && !desktopAlertsEnabled) {
-        desktopAlertsEnabled = true;
-        desktopAlertsDisabledManually = false;
-        saveSettings();
-      }
-
       if (Notification.permission === "denied" && desktopAlertsEnabled) {
         desktopAlertsEnabled = false;
         saveSettings();
@@ -1564,7 +1558,7 @@
     function renderNotifyButton() {
       syncDesktopAlertsWithBrowserPermission();
       const granted = notificationPermission() === "granted";
-      const active = desktopAlertsEnabled || granted;
+      const active = desktopAlertsEnabled && granted;
       els.notifyButton.classList.toggle("on", active);
       els.notifyButton.setAttribute("aria-pressed", String(active));
       els.notifyButton.setAttribute("aria-label", active ? "Выключить уведомления Windows" : "Включить уведомления Windows");
@@ -1580,6 +1574,15 @@
         renderNotifyButton();
         saveSettings();
         showNote("Уведомления не поддерживаются");
+        return;
+      }
+
+      if (desktopAlertsEnabled && Notification.permission === "granted") {
+        desktopAlertsEnabled = false;
+        desktopAlertsDisabledManually = true;
+        renderNotifyButton();
+        saveSettings();
+        showNote("Уведомления выключены");
         return;
       }
 
@@ -1600,7 +1603,7 @@
         if (Notification.permission === "granted") permission = "granted";
       }
 
-      if (permission !== "denied") {
+      if (permission === "granted") {
         desktopAlertsEnabled = true;
         desktopAlertsDisabledManually = false;
         renderNotifyButton();
