@@ -591,6 +591,7 @@
       background: rgba(8, 10, 14, 0.88);
       color: #7d8795;
       z-index: 2;
+      transition: opacity 0.18s ease, transform 0.18s ease;
     }
 
     .terminal-panel {
@@ -608,6 +609,7 @@
       gap: 10px;
       padding: 7px 8px;
       font-size: 12px;
+      transition: bottom 0.24s cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     .terminal-switch {
@@ -645,10 +647,39 @@
       border: 1px solid rgba(42, 47, 56, 0.72);
       background: rgba(8, 10, 14, 0.88);
       color: #7d8795;
-      z-index: 2;
+      z-index: 3;
+      transition: bottom 0.24s cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     .sound-picker.collapsed .sound-list { display: none; }
+
+    .main:has(.sound-picker:not(.collapsed)) .terminal-panel {
+      bottom: 344px;
+    }
+
+    .main.vataga-mode .sound-picker {
+      bottom: 22px;
+    }
+
+    .main.vataga-mode .terminal-panel {
+      bottom: 70px;
+    }
+
+    .main:has(.link-panel:not([hidden]):not(.collapsed)) .sound-picker {
+      bottom: 330px;
+    }
+
+    .main:has(.link-panel:not([hidden]):not(.collapsed)) .terminal-panel {
+      bottom: 378px;
+    }
+
+    .main:has(.link-panel:not([hidden]):not(.collapsed)):has(.sound-picker:not(.collapsed)) .terminal-panel {
+      bottom: 604px;
+    }
+
+    .main.vataga-mode:has(.sound-picker:not(.collapsed)) .terminal-panel {
+      bottom: 296px;
+    }
 
     .sound-toggle {
       display: flex;
@@ -1565,8 +1596,13 @@
         button.classList.toggle("active", button.dataset.terminalMode === terminalMode);
       });
 
+      els.terminalPanel?.closest(".main")?.classList.toggle("vataga-mode", terminalMode === "vataga");
+
       if (els.linkPanel) {
         els.linkPanel.hidden = terminalMode !== "tiger";
+        if (terminalMode !== "tiger") {
+          els.linkPanel.classList.add("collapsed");
+        }
       }
     }
 
