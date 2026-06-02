@@ -593,7 +593,49 @@
       z-index: 2;
     }
 
+    .terminal-panel {
+      position: absolute;
+      right: 22px;
+      bottom: 118px;
+      min-width: 210px;
+      border: 1px solid rgba(42, 47, 56, 0.72);
+      background: rgba(8, 10, 14, 0.88);
+      color: #7d8795;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 7px 8px;
+      font-size: 12px;
+    }
+
+    .terminal-switch {
+      display: flex;
+      gap: 5px;
+    }
+
+    .terminal-option {
+      height: 24px;
+      border: 1px solid rgba(42, 47, 56, 0.95);
+      background: rgba(4, 7, 10, 0.86);
+      color: #8e98a8;
+      padding: 0 9px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .terminal-option:hover,
+    .terminal-option.active {
+      border-color: rgba(0, 255, 170, 0.7);
+      background: rgba(0, 255, 170, 0.09);
+      color: var(--green);
+    }
+
     .link-panel.collapsed .link-grid { display: none; }
+
+    .link-panel[hidden] { display: none; }
 
     .sound-picker {
       position: absolute;
@@ -734,6 +776,7 @@
       .side { border-right: 0; border-bottom: 1px solid var(--line); }
       .alerts { left: 14px; right: 14px; width: auto; }
       .link-panel { left: 14px; right: 14px; width: auto; }
+      .terminal-panel { left: 14px; right: 14px; bottom: 118px; }
       .sound-picker { left: 14px; right: 14px; bottom: 70px; width: auto; }
     }
   </style>
@@ -807,6 +850,13 @@
         </button>
         <div class="sound-list" id="soundList"></div>
       </div>
+      <div class="terminal-panel" id="terminalPanel">
+        <span>&#1058;&#1077;&#1088;&#1084;&#1080;&#1085;&#1072;&#1083;</span>
+        <div class="terminal-switch">
+          <button class="terminal-option active" type="button" data-terminal-mode="tiger">Tiger</button>
+          <button class="terminal-option" type="button" data-terminal-mode="vataga">Vataga</button>
+        </div>
+      </div>
       <div class="link-panel collapsed" id="linkPanel">
         <button class="link-toggle" id="linkToggle" type="button">
           <span>Линк стакана для открытия тикера</span>
@@ -824,6 +874,11 @@
     const BINANCE_KLINES = "https://fapi.binance.com/fapi/v1/klines";
     const BINANCE_COMBINED_STREAM = "wss://fstream.binance.com/stream?streams=";
     const TIGER_WS_URL = "ws://127.0.0.1:7819";
+    const VATAGA_API_BASE = "http://localhost:5005/api/open";
+    const VATAGA_PARTNER_ID = "tenacityyx";
+    const VATAGA_EXCHANGE = "Binance";
+    const VATAGA_MARKET_TYPE = "F";
+    const TERMINALS = ["tiger", "vataga"];
     const LINK_GROUPS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").concat(Array.from({ length: 12 }, (_, index) => String(index)));
     const LINK_COLORS = {
       A: "#fff6b8", B: "#55f06b", C: "#18d4af", D: "#ac55ff", E: "#ff9ca8",
@@ -866,6 +921,8 @@
       soundButton: document.getElementById("soundButton"),
       alertSound: document.getElementById("alertSound"),
       watchList: document.getElementById("watchList"),
+      terminalPanel: document.getElementById("terminalPanel"),
+      terminalButtons: document.querySelectorAll("[data-terminal-mode]"),
       linkPanel: document.getElementById("linkPanel"),
       linkToggle: document.getElementById("linkToggle"),
       linkGrid: document.getElementById("linkGrid"),
@@ -893,6 +950,7 @@
     let desktopAlertsEnabled = false;
     let desktopAlertsDisabledManually = false;
     let selectedSoundId = "sound1";
+    let terminalMode = "tiger";
     let linkGroup = "A";
     let draggingSymbol = "";
     let dragReadySymbol = "";
@@ -939,6 +997,9 @@
         if (LINK_GROUPS.includes(String(parsed.linkGroup))) {
           linkGroup = String(parsed.linkGroup);
         }
+        if (TERMINALS.includes(String(parsed.terminalMode))) {
+          terminalMode = String(parsed.terminalMode);
+        }
         if (typeof parsed.soundEnabled === "boolean") {
           soundEnabled = parsed.soundEnabled;
         }
@@ -957,6 +1018,7 @@
     function saveSettings() {
       localStorage.setItem(SETTINGS_STORAGE, JSON.stringify({
         move: threshold(),
+        terminalMode,
         linkGroup,
         soundEnabled,
         desktopAlertsEnabled,
@@ -1498,6 +1560,24 @@
       showNote(`Линк стакана: ${group}`);
     }
 
+    function renderTerminalPanel() {
+      els.terminalButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.terminalMode === terminalMode);
+      });
+
+      if (els.linkPanel) {
+        els.linkPanel.hidden = terminalMode !== "tiger";
+      }
+    }
+
+    function setTerminalMode(mode) {
+      if (!TERMINALS.includes(mode)) return;
+      terminalMode = mode;
+      saveSettings();
+      renderTerminalPanel();
+      showNote(mode === "vataga" ? "Vataga selected" : "Tiger selected");
+    }
+
     function sendTigerSymbol(symbol, exchange) {
       return new Promise((resolve, reject) => {
         let settled = false;
@@ -1560,6 +1640,49 @@
       }
     }
 
+    async function openSymbolInVataga(symbol) {
+      const url = [
+        VATAGA_API_BASE,
+        encodeURIComponent(VATAGA_PARTNER_ID),
+        encodeURIComponent(VATAGA_EXCHANGE),
+        encodeURIComponent(VATAGA_MARKET_TYPE),
+        encodeURIComponent(symbol)
+      ].join("/");
+
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          cache: "no-store"
+        });
+
+        if (!response.ok) {
+          throw new Error(`Vataga ${response.status}`);
+        }
+
+        showNote(`${symbol} sent to Vataga`);
+      } catch {
+        try {
+          await fetch(url, {
+            method: "POST",
+            mode: "no-cors",
+            cache: "no-store"
+          });
+          showNote(`${symbol} sent to Vataga`);
+        } catch {
+          await copySymbol(symbol);
+          showNote("Vataga did not answer, symbol copied");
+        }
+      }
+    }
+
+    function openSymbolInTerminal(symbol) {
+      if (terminalMode === "vataga") {
+        return openSymbolInVataga(symbol);
+      }
+
+      return openSymbolInTiger(symbol);
+    }
+
     function showNote(text) {
       els.copyNote.textContent = text;
       els.copyNote.classList.add("show");
@@ -1620,11 +1743,11 @@
         closeAlert(card);
       });
 
-      card.addEventListener("click", () => openSymbolInTiger(symbol));
+      card.addEventListener("click", () => openSymbolInTerminal(symbol));
       card.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          openSymbolInTiger(symbol);
+          openSymbolInTerminal(symbol);
         }
       });
       alertStack.unshift(card);
@@ -1793,7 +1916,7 @@
 
         notification.onclick = () => {
           window.focus();
-          openSymbolInTiger(symbol);
+          openSymbolInTerminal(symbol);
           notification.close();
         };
       } catch (error) {
@@ -1896,7 +2019,7 @@
       if (!target) return;
       event.preventDefault();
       event.stopPropagation();
-      openSymbolInTiger(target.dataset.openSymbol);
+      openSymbolInTerminal(target.dataset.openSymbol);
     }, true);
     els.watchList.addEventListener("pointerdown", (event) => {
       const button = event.target.closest("[data-threshold-toggle]");
@@ -1959,6 +2082,9 @@
       setLinkGroup(button.dataset.linkGroup);
       els.linkPanel.classList.add("collapsed");
     });
+    els.terminalButtons.forEach((button) => {
+      button.addEventListener("click", () => setTerminalMode(button.dataset.terminalMode));
+    });
     els.soundPickerToggle.addEventListener("click", () => {
       els.soundPicker.classList.toggle("collapsed");
     });
@@ -1977,6 +2103,7 @@
     renderNotifyButton();
     renderSoundList();
     renderLinkPanel();
+    renderTerminalPanel();
     renderWatchList();
     updateStreams();
   </script>
