@@ -1719,6 +1719,12 @@
       return openSymbolInTiger(symbol);
     }
 
+    function openSymbolInTerminalAndCopy(symbol) {
+      const terminalRequest = openSymbolInTerminal(symbol);
+      void copySymbol(symbol);
+      return terminalRequest;
+    }
+
     function showNote(text) {
       els.copyNote.textContent = text;
       els.copyNote.classList.add("show");
@@ -1779,11 +1785,11 @@
         closeAlert(card);
       });
 
-      card.addEventListener("click", () => openSymbolInTerminal(symbol));
+      card.addEventListener("click", () => openSymbolInTerminalAndCopy(symbol));
       card.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          openSymbolInTerminal(symbol);
+          openSymbolInTerminalAndCopy(symbol);
         }
       });
       alertStack.unshift(card);
@@ -1952,7 +1958,7 @@
 
         notification.onclick = () => {
           window.focus();
-          openSymbolInTerminal(symbol);
+          openSymbolInTerminalAndCopy(symbol);
           notification.close();
         };
       } catch (error) {
@@ -2055,7 +2061,7 @@
       if (!target) return;
       event.preventDefault();
       event.stopPropagation();
-      openSymbolInTerminal(target.dataset.openSymbol);
+      openSymbolInTerminalAndCopy(target.dataset.openSymbol);
     }, true);
     els.watchList.addEventListener("pointerdown", (event) => {
       const button = event.target.closest("[data-threshold-toggle]");
