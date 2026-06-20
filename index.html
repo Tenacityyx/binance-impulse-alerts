@@ -206,6 +206,15 @@
       margin-bottom: 8px;
       color: #c8ced8;
       font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .watch-count {
+      color: #727d8d;
+      font-variant-numeric: tabular-nums;
     }
 
     .coin {
@@ -857,7 +866,10 @@
       </section>
 
       <section class="watch">
-        <div class="watch-title">Мои монеты</div>
+        <div class="watch-title">
+          <span>Мои монеты</span>
+          <span class="watch-count" id="watchCount">0 / 60</span>
+        </div>
         <div id="watchList">
           <div class="coin">
             <span class="drag-handle"></span>
@@ -942,6 +954,7 @@
       alerts: document.getElementById("alerts"),
       connection: document.getElementById("connection"),
       coinCount: document.getElementById("coinCount"),
+      watchCount: document.getElementById("watchCount"),
       bestMove: document.getElementById("bestMove"),
       alertCount: document.getElementById("alertCount"),
       updated: document.getElementById("updated"),
@@ -1102,7 +1115,7 @@
       const symbol = normalizeSymbol(els.symbolInput.value);
       if (!symbol) return;
       if (!symbols.has(symbol) && symbols.size >= MAX_SYMBOLS) {
-        showNote("\u041b\u0438\u043c\u0438\u0442: 40 \u043c\u043e\u043d\u0435\u0442");
+        showNote(`\u041b\u0438\u043c\u0438\u0442: ${MAX_SYMBOLS} \u043c\u043e\u043d\u0435\u0442`);
         return;
       }
 
@@ -1367,6 +1380,7 @@
     function renderWatchList() {
       const sorted = [...symbols];
       els.coinCount.textContent = sorted.length;
+      els.watchCount.textContent = `${sorted.length} / ${MAX_SYMBOLS}`;
 
       if (!sorted.length) {
         els.bestMove.textContent = "0%";
