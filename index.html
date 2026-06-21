@@ -509,6 +509,7 @@
 
     .alert-head {
       display: flex;
+      align-items: center;
       justify-content: space-between;
       gap: 12px;
       padding: 18px 20px 0 50px;
@@ -536,6 +537,87 @@
       transform: translateY(-1px);
     }
 
+    .alert-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .mute-alert {
+      display: inline-grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: rgba(244, 246, 248, 0.62);
+      cursor: pointer;
+      transition: color 140ms ease, background-color 140ms ease;
+    }
+
+    .mute-alert:hover,
+    .mute-alert.open {
+      color: var(--green);
+      background: rgba(36, 245, 160, 0.07);
+    }
+
+    .mute-alert.active { color: var(--green); }
+
+    .mute-alert svg {
+      display: block;
+      width: 17px;
+      height: 17px;
+    }
+
+    .mute-menu {
+      position: absolute;
+      top: 51px;
+      right: 18px;
+      z-index: 4;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(44px, 1fr));
+      gap: 4px;
+      width: min(224px, calc(100% - 36px));
+      padding: 6px;
+      border: 1px solid #2b3440;
+      border-radius: 5px;
+      background: rgba(8, 12, 17, 0.98);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-5px);
+      transition: opacity 140ms ease, transform 140ms ease;
+    }
+
+    .mute-menu.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .mute-option {
+      min-width: 0;
+      height: 30px;
+      padding: 0 6px;
+      border: 1px solid #2a3440;
+      border-radius: 3px;
+      background: #0b1016;
+      color: #b8c3d0;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0;
+      transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+    }
+
+    .mute-option:hover {
+      border-color: var(--green);
+      background: rgba(36, 245, 160, 0.08);
+      color: var(--green);
+    }
+
     .close-alert {
       position: relative;
       display: inline-grid;
@@ -547,8 +629,12 @@
       color: rgba(244, 246, 248, 0.72);
       line-height: 1;
       cursor: pointer;
-      font-size: 26px;
-      font-weight: 300;
+    }
+
+    .close-alert svg {
+      display: block;
+      width: 17px;
+      height: 17px;
     }
 
     .close-alert::after {
@@ -1022,6 +1108,7 @@
     const SYMBOLS_STORAGE = "binance-watchlist-symbols-v1";
     const SYMBOL_THRESHOLDS_STORAGE = "binance-watchlist-thresholds-v1";
     const SETTINGS_STORAGE = "binance-watchlist-settings-v1";
+    const MUTED_SYMBOLS_STORAGE = "binance-watchlist-muted-symbols-v1";
     const STREAMS_PER_SOCKET = 180;
     const STREAM_HEALTH_CHECK_MS = 3000;
     const STREAM_STALE_MS = 12000;
@@ -1070,6 +1157,7 @@
 
     const symbols = new Set(loadSymbols());
     const symbolThresholds = loadSymbolThresholds();
+    const mutedSymbols = loadMutedSymbols();
     const states = new Map();
     const lastPrices = new Map();
     const alertedMinutes = new Set();
@@ -1120,6 +1208,45 @@
 
     function saveSymbolThresholds() {
       localStorage.setItem(SYMBOL_THRESHOLDS_STORAGE, JSON.stringify(symbolThresholds));
+    }
+
+    function loadMutedSymbols() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(MUTED_SYMBOLS_STORAGE) || "{}");
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+        const now = Date.now();
+        return Object.fromEntries(Object.entries(parsed)
+          .map(([symbol, until]) => [normalizeSymbol(symbol), Number(until)])
+          .filter(([symbol, until]) => symbol && Number.isFinite(until) && until > now));
+      } catch {
+        return {};
+      }
+    }
+
+    function saveMutedSymbols() {
+      const now = Date.now();
+      Object.keys(mutedSymbols).forEach((symbol) => {
+        if (!Number.isFinite(mutedSymbols[symbol]) || mutedSymbols[symbol] <= now) {
+          delete mutedSymbols[symbol];
+        }
+      });
+      localStorage.setItem(MUTED_SYMBOLS_STORAGE, JSON.stringify(mutedSymbols));
+    }
+
+    function isSymbolMuted(symbol) {
+      const until = Number(mutedSymbols[symbol]);
+      if (Number.isFinite(until) && until > Date.now()) return true;
+      if (symbol in mutedSymbols) {
+        delete mutedSymbols[symbol];
+        saveMutedSymbols();
+      }
+      return false;
+    }
+
+    function muteSymbol(symbol, hours) {
+      mutedSymbols[symbol] = Date.now() + hours * 60 * 60 * 1000;
+      saveMutedSymbols();
+      showNote(`${baseSymbol(symbol)}: без алертов ${hours} ч`);
     }
 
     function loadSettings() {
@@ -1226,6 +1353,7 @@
     function removeSymbol(symbol) {
       symbols.delete(symbol);
       delete symbolThresholds[symbol];
+      delete mutedSymbols[symbol];
       if (openThresholdSymbol === symbol) openThresholdSymbol = "";
       states.delete(symbol);
       lastPrices.delete(symbol);
@@ -1234,6 +1362,7 @@
       }
       saveSymbols();
       saveSymbolThresholds();
+      saveMutedSymbols();
       renderWatchList();
       updateStreams();
     }
@@ -1455,6 +1584,7 @@
     }
 
     function fireAlert(state) {
+      if (isSymbolMuted(state.symbol)) return;
       const key = `${state.symbol}:${state.key}`;
       if (alertedMinutes.has(key)) return;
       alertedMinutes.add(key);
@@ -1807,13 +1937,33 @@
 
       const card = document.createElement("div");
       card.className = "alert";
+      card.dataset.symbol = symbol;
       card.tabIndex = 0;
       card.setAttribute("role", "button");
       card.title = `Открыть ${symbol} в Tiger`;
       card.innerHTML = `
         <div class="alert-head">
           <span>LONG</span>
-          <button class="close-alert" type="button" aria-label="Закрыть">×</button>
+          <div class="alert-actions">
+            <button class="mute-alert" type="button" aria-label="Отключить алерты этой монеты" aria-expanded="false" title="Не беспокоить">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M10.27 21a2 2 0 0 0 3.46 0"></path>
+                <path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"></path>
+              </svg>
+            </button>
+            <button class="close-alert" type="button" aria-label="Закрыть">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+                <path d="M6 6l12 12"></path>
+                <path d="M18 6L6 18"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="mute-menu" aria-label="Отключить алерты на время">
+          <button class="mute-option" type="button" data-mute-hours="1">1 Ч</button>
+          <button class="mute-option" type="button" data-mute-hours="4">4 Ч</button>
+          <button class="mute-option" type="button" data-mute-hours="12">12 Ч</button>
+          <button class="mute-option" type="button" data-mute-hours="24">24 Ч</button>
         </div>
         <div class="alert-body">
           <div class="symbol-line">
@@ -1830,6 +1980,28 @@
       `;
 
       const closeButton = card.querySelector(".close-alert");
+      const muteButton = card.querySelector(".mute-alert");
+      const muteMenu = card.querySelector(".mute-menu");
+      muteButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const open = !muteMenu.classList.contains("open");
+        muteMenu.classList.toggle("open", open);
+        muteButton.classList.toggle("open", open);
+        muteButton.setAttribute("aria-expanded", String(open));
+      });
+      muteMenu.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const option = event.target.closest("[data-mute-hours]");
+        if (!option) return;
+        const hours = Number(option.dataset.muteHours);
+        if (!Number.isFinite(hours) || hours <= 0) return;
+        muteSymbol(symbol, hours);
+        muteMenu.classList.remove("open");
+        muteButton.classList.remove("open");
+        muteButton.classList.add("active");
+        muteButton.setAttribute("aria-expanded", "false");
+        muteButton.title = `Алерты отключены на ${hours} ч`;
+      });
       closeButton.addEventListener("pointerdown", (event) => {
         event.stopPropagation();
         window.clearTimeout(closeAllTimer);
